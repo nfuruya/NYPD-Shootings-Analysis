@@ -1,0 +1,251 @@
+---
+title: "NYPD Shootings Social Economic Impact Analysis"
+date: "6/12/2021"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r load libraries, include = FALSE}
+
+# this is an exercise for week 3 of the Data Science as a Field course
+# to familiarize ourselves with loading data from a web site, 
+
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(formattable)
+library(ggrepel)
+
+```
+
+```{r get data, include = FALSE}
+
+# 
+# pull and read NYPD Shooting Incident Data (Historic) data from data.gov
+# 
+# data description
+# https://opendatanetwork.herokuapp.com/dataset/data.cityofnewyork.us/833y-fsy8
+#
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+nypd_shootings <- read_csv(url_in)
+description = c(
+    'Location of the shooting incident', 
+    'Perpetrator’s age within a category', 
+    'Perpetrator’s sex description', 
+    'Perpetrator’s race description')
+missing = accounting(c(
+    sum(is.na(nypd_shootings$LOCATION_DESC)),
+    sum(is.na(nypd_shootings$PERP_AGE_GROUP)),
+    sum(is.na(nypd_shootings$PERP_SEX)),
+    sum(is.na(nypd_shootings$PERP_RACE))), format = "d")
+actions = c(
+    'ignore - ie house, building, bar',
+    'ignore - assume not seen',
+    'ignore - assume not seen',
+    'ignore - assume not seen')
+missing_data <- data.frame(description, missing, actions)
+```
+
+
+```{r borough analysis, include = FALSE, dev='png', fig.show='hide'}
+nypd_shootings_analyze <- nypd_shootings %>% 
+  mutate(OCCUR_DATE = mdy(OCCUR_DATE)) %>%
+  mutate(OCCUR_TIME = hms(OCCUR_TIME))
+
+# shootings by borough
+nypd_shootings_borough <- nypd_shootings_analyze %>% 
+  count(BORO) %>%
+  arrange(desc(n))
+nypd_shootings_borough_plot = ggplot(data=nypd_shootings_borough, aes(x = reorder(BORO, -n), y = n)) + geom_bar(stat="identity") + labs(x = "borough", y = "victims") + scale_y_continuous(labels = scales::comma) + ggtitle("\nshootings by boroughs") 
+```
+
+```{r by hour analysis, include = FALSE, dev='png', fig.show='hide'}
+
+# shooting by hour
+nypd_shootings_by_hour <- nypd_shootings_analyze %>% 
+  group_by(nypd_shootings_analyze$OCCUR_TIME@hour) %>%
+  count(nypd_shootings_analyze$OCCUR_TIME@hour)
+nypd_shootings_by_hour_plot = ggplot(data = nypd_shootings_by_hour, mapping = aes(x = nypd_shootings_by_hour$nypd_shootings_analyze$OCCUR_TIME@hour,  y = n)) + geom_point() + labs(x = "hour of day", y = "shootings") + scale_y_continuous(labels = scales::comma) + ggtitle("\nshootings by hour")
+```
+
+```{r age group analysis, include = FALSE, dev='png', fig.show='hide'}
+
+# shooting by victim age group
+nypd_shootings_age_group <- nypd_shootings_analyze %>% 
+  count(VIC_AGE_GROUP)
+nypd_shootings_age_group_plot = ggplot(data=nypd_shootings_age_group, aes(x = VIC_AGE_GROUP, y = n)) + geom_bar(stat="identity") + labs(x = "age group", y = "victims") + scale_y_continuous(labels = scales::comma) + ggtitle("\nshootings by age group")
+```
+
+```{r median income to shooting correlation, include = FALSE, dev='png', fig.show='hide'}
+
+BORO = c('MANHATTAN', 'STATEN ISLAND', 'QUEENS', 'BROOKLYN', 'BRONX')
+income = c(85000, 79000, 64000, 57000, 37000)
+median_income_by_borough <- data.frame(BORO, income)
+income_correlation <- merge(x=median_income_by_borough, y=as.data.frame(nypd_shootings_borough), by="BORO")
+nypd_shootings_income_shooting_plot = ggplot(data=income_correlation, aes(x = income, y = n)) + geom_point() + labs(x = "median income in USD", y = "shootings") + scale_y_continuous(labels = scales::comma) + scale_x_continuous(labels = scales::comma) + ggtitle("\nrelation of shootings vs income") + geom_text_repel(data = income_correlation, aes(label = BORO)) + geom_smooth(method='lm', se=F)
+
+```
+
+---
+
+### The Data
+
+This is an analysis of shootings in the City of New York based on the "NYPD Shooting Incident Data (Historic)" sourced from\
+https://catalog.data.gov/dataset \
+with its details here\
+https://data.cityofnewyork.us/Public-Safety/NYPD-Shooting-Incident-Data-Historic-/833y-fsy8. \
+\
+There are `r format(nrow(nypd_shootings), big.mark = ",")` data points in `r format(ncol(nypd_shootings), big.mark = ",")` columns with a date range from `r min(nypd_shootings$OCCUR_DATE)` to `r max(nypd_shootings$OCCUR_DATE)`.
+Note that data presented is an aggregation of this date range and not adjusted to intervals such as day, week or month.
+
+Missing data for the original data as below.
+`r formattable(missing_data, align = c("l","r","l"))`
+For this analysis the above missing fields will not be used. In the case they are required for subsequent in depth analysis, it may be possible to derive location characteristics, was the shooting at a home, store or workplace, from the longitude and latitude data. Perpetrator characteristics are considered impossible to derive and assumed to be missing due to lack of witnesses.
+
+---
+
+### What I am Interested in
+
+For this analysis I will focus on whether social economic factors can be correlated with shootings. Typically it is said that "better off neighborhoods" have lower crime and can be attributed to fewer criminals in the neighborhood and or higher security. A key characteristic of a "better off neighborhood" can be income which we will look at.
+
+---
+
+### The Evidence
+
+In the "shootings by boroughs" chart we can see higher levels of shootings in some boroughs vs others however based on the https://catalog.data.gov/dataset we can't see why with respect to income. I add data sourced from Quora and a regression model to understand income and shooting correlation as shown in "relation of shootings vs income" chart. Assumptions can be made on median income; lower income areas may attract more shootings as show with the regression line. As mentioned earlier, this can be due to fewer criminals in a high security area.
+
+https://www.quora.com/What-is-the-richest-borough-in-NYC
+
+```{r, nypd_shootings_income_plot, fig.show="hold", out.width="80%", echo = FALSE, message = FALSE}
+
+plot(nypd_shootings_borough_plot)
+plot(nypd_shootings_income_shooting_plot)
+
+```
+
+---
+
+### What Next
+
+This simple analysis helps us conclude that there social economic factors such as income has some sort of impact on shootings. If we want to find long term sustainable solutions to crime I believe this finding tells us to further investigate improving social economic factors in order to reduce crime. There is data, not presented here, which can lead us to conclusions for tactical fixes such as more police in certain areas and at certain times or tell us "don't stay out at night". These tactical fixes may just be bandage.
+
+Further analysis based on mathematical processes with larger and broader datasets are required to prove the validatity of this report and  determine action plans. Some areas to investigate to better understand social economic impact on shootings are
+
+* education and occupation have an impact on income but how much direct impact
+
+* do familiy structures and how they spend time together have an impact.
+
+* are there correlations between victim and perpetrator to crimes such as robbery or gang wars
+
+---
+
+### In Hindsight
+
+I use the data in this analysis to offset and at the same time support my bias of New York City including those on correlation of New York City areas and safety. I have lived and worked in Manhattan I have formed strong opinions over the years which have given me hints on where to start the analysis, what to do to offset my biases to better understand as well as educate and convince others on topics which interest me such as social economic issues.
+
+I assume that since this data is from a government source, it is reasonably accurate and based on standard data collection techniques. When viewing the raw data I felt that the breadth of data available from this source is biased in that it seems to indicate race is an issue however is that so or rather is root cause of shootings due to a social economic factor which can be changed
+
+I will, for future analysis, when adding other similar and complementary sources will
+
+* Assess whether there are discrepancies between data used for this analysis and other sources. Discrepancies can indicate data quality issues or bias due to data collection techniques.
+
+* Potentially leverage other sources fill in the missing data gaps such as "location", ie bar, home, apartment, which can give me more insight whether venue has an impact
+
+---
+
+### Summary of original data set
+
+```{r summary, echo=FALSE}
+summary(nypd_shootings)
+
+```
+
+---
+
+### This report was generated in the following environment
+```{r sessionInfo, echo=FALSE}
+sessionInfo()
+```
+
+### Show the code for reproducibility
+```{r showTheCode, eval=FALSE, echo=TRUE}
+
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(formattable)
+library(ggrepel)
+
+#
+# pull and read NYPD Shooting Incident Data (Historic) data from data.gov
+# tally up missing data
+#
+# data description
+# https://opendatanetwork.herokuapp.com/dataset/data.cityofnewyork.us/833y-fsy8
+#
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+nypd_shootings <- read_csv(url_in)
+
+#
+# show date range of data embedded in a sentence
+There are `r format(nrow(nypd_shootings), big.mark = ",")` data points in `r format(ncol(nypd_shootings), big.mark = ",")` columns with a date range from `r min(nypd_shootings$OCCUR_DATE)` to `r max(nypd_shootings$OCCUR_DATE)`.
+
+#
+# prep and show the missing data counts and actions in a table
+description = c(
+    'Location of the shooting incident',
+    'Perpetrator’s age within a category',
+    'Perpetrator’s sex description',
+    'Perpetrator’s race description')
+missing = accounting(c(
+    sum(is.na(nypd_shootings$LOCATION_DESC)),
+    sum(is.na(nypd_shootings$PERP_AGE_GROUP)),
+    sum(is.na(nypd_shootings$PERP_SEX)),
+    sum(is.na(nypd_shootings$PERP_RACE))), format = "d")
+actions = c(
+    'ignore - ie house, building, bar',
+    'ignore - assume not seen',
+    'ignore - assume not seen',
+    'ignore - assume not seen')
+missing_data <- data.frame(description, missing, actions)
+`r formattable(missing_data, align = c("l","r","l"))`
+
+#
+# extract and convert data to be reused for the following graphs
+nypd_shootings_analyze <- nypd_shootings %>%
+  mutate(OCCUR_DATE = mdy(OCCUR_DATE)) %>%
+  mutate(OCCUR_TIME = hms(OCCUR_TIME))
+
+#
+# prep data and graph for "shootings by borough" sorted by number of shootings
+nypd_shootings_borough <- nypd_shootings_analyze %>%
+  count(BORO) %>%
+  arrange(desc(n))
+nypd_shootings_borough_plot = ggplot(data=nypd_shootings_borough, aes(x = reorder(BORO, -n), y = n)) + geom_bar(stat="identity") + labs(x = "borough", y = "victims") + scale_y_continuous(labels = scales::comma) + ggtitle("\nshootings by boroughs")
+
+#
+# prep additional data source, add regression model and graph to correlate borough, median income and shootings
+BORO = c('MANHATTAN', 'STATEN ISLAND', 'QUEENS', 'BROOKLYN', 'BRONX')
+income = c(85000, 79000, 64000, 57000, 37000)
+median_income_by_borough <- data.frame(BORO, income)
+income_correlation <- merge(x=median_income_by_borough, y=as.data.frame(nypd_shootings_borough), by="BORO")
+nypd_shootings_income_shooting_plot = ggplot(data=income_correlation, aes(x = income, y = n)) + geom_point() + labs(x = "median income in USD", y = "shootings") + scale_y_continuous(labels = scales::comma) + scale_x_continuous(labels = scales::comma) + ggtitle("\nrelation of shootings vs income") + geom_text_repel(data = income_correlation, aes(label = BORO)) + geom_smooth(method='lm', se=F)
+
+#
+# output the graphs prepared above
+plot(nypd_shootings_borough_plot)
+plot(nypd_shootings_income_shooting_plot)
+
+#
+# show summary of original data set and session which details the environment this report was generated in
+summary(nypd_shootings)
+sessionInfo()
+
+```
+
