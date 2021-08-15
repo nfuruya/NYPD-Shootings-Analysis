@@ -3,8 +3,8 @@ title: "NYPD Shootings Social Economic Impact Analysis"
 date: "6/12/2021"
 output:
   word_document: default
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -133,7 +133,7 @@ plot(nypd_shootings_income_shooting_plot)
 
 ### What Next
 
-This simple analysis helps us conclude that there social economic factors such as income has some sort of impact on shootings. If we want to find long term sustainable solutions to crime I believe this finding tells us to further investigate improving social economic factors in order to reduce crime. There is data, not presented here, which can lead us to conclusions for tactical fixes such as more police in certain areas and at certain times or tell us "don't stay out at night". These tactical fixes may just be bandage.
+This simple analysis helps us conclude that there are social economic factors such as income has some sort of impact on shootings. If we want to find long term sustainable solutions to crime I believe this finding tells us to further investigate improving social economic factors in order to reduce crime. There is data, not presented here, which can lead us to conclusions for tactical fixes such as more police in certain areas and at certain times or tell us "don't stay out at night". These tactical fixes may just be bandage.
 
 Further analysis based on mathematical processes with larger and broader datasets are required to prove the validatity of this report and  determine action plans. Some areas to investigate to better understand social economic impact on shootings are
 
